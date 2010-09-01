@@ -97,7 +97,7 @@ fromLists :: [(Index, [a])] -> SparseVector a
 fromLists = fromVectors . map (second V.fromList)
 
 toVectors :: SparseVector a -> [(Index, Vector a)]
-toVectors (SparseVector t) = map (\(Node (Interval i _) v) -> (i, v)) . toList $ t
+toVectors (SparseVector t) = map (\(Node i v) -> (low i, v)) . toList $ t
 
 toLists :: SparseVector a -> [(Index, [a])]
 toLists = map (second V.toList) . toVectors
@@ -114,3 +114,6 @@ union (SparseVector xs) (SparseVector ys) = SparseVector (merge1 xs ys)
         merge2 as (viewl -> b@(Node i _) :< bs)	= l >< b <| merge1 r bs
           where (l, r) = split larger as
                 larger (IntInterval k _) = k > i
+
+instance Functor SparseVector where
+  fmap f (SparseVector t) = SparseVector (F.unsafeFmap (fmap (V.map f)) t)
