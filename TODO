@@ -1,2 +1,6 @@
-- Support the various forms of vectors
+- Decide whether to join adjacent segments
+- Support the various forms of vectors, copy structure of Vector
+- Add mutable ones
 - Add fusion rules
+- Write more tests, and make them pass. Check HPC too
+- Documentation!

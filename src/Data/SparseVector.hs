@@ -4,8 +4,10 @@ module Data.SparseVector where
 -- The interval map stuff is borrowed and expanded from Data.IntervalMap.Fingertree in the fingertree package.
 -- I can't just link to it because their constructors aren't exposed and I need more operations.
 
-import Control.Applicative (Applicative, (<$>), (<*>))
-import Control.Arrow (first, second)
+import Prelude hiding (length, (++))
+
+import Control.Applicative ((<$>))
+import Control.Arrow (second)
 
 import Data.Maybe
 import Data.Monoid
@@ -18,12 +20,16 @@ import qualified Data.Vector as V
 import Data.Vector (Vector)
 
 import qualified Data.FingerTree as F
-import Data.FingerTree (FingerTree, Measured(..), ViewL(..), (<|), (><), viewl, split)
+import Data.FingerTree (FingerTree, Measured(..), ViewL(..), ViewR(..), (<|), (><), viewl, viewr, split)
 
 type Index = Int
 
 data Interval = Interval { low :: !Index, high :: !Index }
   deriving (Eq, Ord, Show)
+
+-- Now I'm kind of glad I'm using ints
+shiftInterval :: Index -> Interval -> Interval
+shiftInterval i (Interval l h) = Interval (l + i) (h + i)
 
 point :: Index -> Interval
 point v = Interval v v
@@ -44,9 +50,11 @@ data IntInterval = NoInterval | IntInterval !Interval !Index
 
 atleast :: Index -> IntInterval -> Bool
 atleast k (IntInterval _ hi) = k <= hi
+atleast _ NoInterval = error "remind me again why I can't use a semigroup for fingertrees?"
 
 greater :: Index -> IntInterval -> Bool
 greater k (IntInterval i _) = low i > k
+greater _ NoInterval = error "remind me again why I can't use a semigroup for fingertrees?"
 
 instance Monoid IntInterval where
 	mempty = NoInterval
@@ -73,19 +81,23 @@ singleton :: Index -> a -> SparseVector a
 singleton i x = SparseVector (F.singleton (Node (point i) (V.singleton x)))
 
 (!) :: SparseVector a -> Index -> Maybe a
-sv ! i = (V.! i) <$> getSegment i sv
+sv ! i = (\(b, v) -> v V.! (i - b)) <$> getSegment i sv
 
-getSegment :: Index -> SparseVector a -> Maybe (Vector a)
+length :: SparseVector a -> Index
+length (SparseVector (viewr -> EmptyR)) = 0
+length (SparseVector (viewr -> _ :> Node (Interval _ h) _)) = h
+
+getSegment :: Index -> SparseVector a -> Maybe (Index, Vector a)
 getSegment i = listToMaybe . getSegments i i
 
-getSegments :: Index -> Index -> SparseVector a -> [Vector a]
+getSegments :: Index -> Index -> SparseVector a -> [(Index, Vector a)]
 getSegments lo hi (SparseVector t) = matches (F.dropUntil (atleast lo) (F.takeUntil (greater hi) t))
   where matches (viewl -> EmptyL) = []
-        matches (viewl -> Node i x :< xs) = x : matches xs
+        matches (viewl -> Node i x :< xs) = (low i, x) : matches xs
 
 
 fromVector :: Index -> Vector a -> SparseVector a
-fromVector i v = SparseVector (F.singleton (Node (Interval i (V.length v)) v))
+fromVector i v = SparseVector (F.singleton (Node (Interval i (i + V.length v)) v))
 
 fromVectors :: [(Index, Vector a)] -> SparseVector a
 fromVectors = foldl' union empty . map (uncurry fromVector)
@@ -117,3 +129,10 @@ union (SparseVector xs) (SparseVector ys) = SparseVector (merge1 xs ys)
 
 instance Functor SparseVector where
   fmap f (SparseVector t) = SparseVector (F.unsafeFmap (fmap (V.map f)) t)
+
+
+shift :: Index -> SparseVector a -> SparseVector a
+shift d (SparseVector t) = SparseVector (F.unsafeFmap (\(Node i v) -> Node (shiftInterval d i) v) t)
+
+(++) :: SparseVector a -> SparseVector a -> SparseVector a
+t ++ v = union t (shift (length t) v)
