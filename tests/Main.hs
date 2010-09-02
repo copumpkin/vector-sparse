@@ -4,7 +4,7 @@ import Test.Framework (defaultMain, testGroup)
 import Test.Framework.Providers.QuickCheck2 (testProperty)
 
 import Test.QuickCheck
-
+import Test.QuickCheck.Modifiers
 
 import Data.SparseVector
 import qualified Data.Vector as V
@@ -15,33 +15,28 @@ main = defaultMain tests
 
 tests =
   [ testGroup "Conversion functions" 
-      [ testProperty "toVectors . fromVectors == id" prop_toVectorsFromVectors
-      , testProperty "fromVectors . toVectors == id" prop_fromVectorsToVectors
-      , testProperty "toLists . fromLists == id" prop_toListsFromLists
-      , testProperty "fromLists . toLists == idsort2" prop_fromListsToLists
+      [ testProperty "fromVectors . toVectors == id" prop_fromVectorsToVectors
+      , testProperty "fromLists . toLists == id" prop_fromListsToLists
+      , testProperty "fromMaybeVector . toMaybeVector == id" prop_fromMaybeVectorToMaybeVector
       ]
   , testGroup "Indexing functions"
       [ testProperty "Indexing on a single segment is sane" prop_indexSingleSegment
       ]
   ]
 
-
-prop_toVectorsFromVectors xs = toVectors (fromVectors xs) == xs
-  where types = (xs :: [(Index, Vector Int)])
-
 prop_fromVectorsToVectors xs = fromVectors (toVectors xs) == xs
   where types = (xs :: SparseVector Int)
-
-
-prop_toListsFromLists xs = toLists (fromLists xs) == xs
-  where types = (xs :: [(Index, [Int])])
 
 prop_fromListsToLists xs = fromLists (toLists xs) == xs
   where types = (xs :: SparseVector Int)
 
 
-prop_indexSingleSegment xs j i = not (null xs) && i >= 0 ==> Just (xs !! i) == fromList j xs ! (i - j)
+prop_indexSingleSegment (NonEmpty xs) (NonNegative j) (NonNegative i) = i < Prelude.length xs ==> Just (xs !! i) == fromList j xs ! (j + i)
   where types = (xs :: [Int])
+
+prop_fromMaybeVectorToMaybeVector xs = fromMaybeVector (toMaybeVector xs) == xs
+  where types = (xs :: SparseVector Int)
+
 
 {-
 prop_sort2 xs =

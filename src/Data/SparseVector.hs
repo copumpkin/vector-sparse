@@ -4,12 +4,16 @@ module Data.SparseVector where
 -- The interval map stuff is borrowed and expanded from Data.IntervalMap.Fingertree in the fingertree package.
 -- I can't just link to it because their constructors aren't exposed and I need more operations.
 
+import qualified Prelude as P
 import Prelude hiding (length, (++))
 
-import Control.Applicative ((<$>))
+import Control.Applicative ((<$>), (<*>))
 import Control.Arrow (second)
 
+import Data.List (groupBy)
 import Data.Maybe
+
+import Data.Function
 import Data.Monoid
 import Data.Foldable
 import Data.Traversable
@@ -97,7 +101,8 @@ getSegments lo hi (SparseVector t) = matches (F.dropUntil (atleast lo) (F.takeUn
 
 
 fromVector :: Index -> Vector a -> SparseVector a
-fromVector i v = SparseVector (F.singleton (Node (Interval i (i + V.length v)) v))
+fromVector i v | V.null v = empty
+               | otherwise = SparseVector (F.singleton (Node (Interval i (i + V.length v)) v))
 
 fromVectors :: [(Index, Vector a)] -> SparseVector a
 fromVectors = foldl' union empty . map (uncurry fromVector)
@@ -113,6 +118,19 @@ toVectors (SparseVector t) = map (\(Node i v) -> (low i, v)) . toList $ t
 
 toLists :: SparseVector a -> [(Index, [a])]
 toLists = map (second V.toList) . toVectors
+
+fromMaybeVector :: Vector (Maybe a) -> SparseVector a
+fromMaybeVector = fromLists . map (second catMaybes) . filter (isJust . head . snd) . (flip zip <*> scanl (\x y -> x + P.length y) 0) . groupBy ((==) `on` isJust) . V.toList
+
+-- Most of the time you don't want this function, anyway
+toMaybeVector :: SparseVector a -> Vector (Maybe a)
+toMaybeVector sv = V.map (sv !) (V.enumFromTo 0 (length sv - 1)) -- TODO: this could be done more efficiently by actually walking the tree and filling in the blanks
+
+fromMaybeList :: [Maybe a] -> SparseVector a
+fromMaybeList = fromMaybeVector . V.fromList
+
+toMaybeList :: SparseVector a -> [Maybe a]
+toMaybeList = V.toList . toMaybeVector
 
 -- Does this make sense to expose? we'd need a more meaningful behavior to do for overlapping segments, because we don't want overlapping segments
 union  :: SparseVector a -> SparseVector a -> SparseVector a
